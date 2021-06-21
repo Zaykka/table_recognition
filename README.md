@@ -7,14 +7,24 @@
 - `Python` 3.7.6
 - `numpy`        1.20.0
 - `pandas` 1.0.1
+- `pdf2image` 1.15.1
 - `pytesseract` 0.3.7
 - `opencv-python`            4.5.1.48
 - `Pillow` 8.1.0
 - `tesseract` 4.1.1
 
 ### Usage
+Клонируем данный репозиторий к себе.  
 
+`git clone https://github.com/Zaykka/table_recognition`
 
+Через консоль запускаем файл `table-rec.py` с аргументом `путь_до_файла`. Тестовая выборка находится в папке `images`.
+
+  Например, если мы хотим распознать таблицу в файле `images/Выписки_расписания/vypiska_1.jpeg`, открываем консоль, переходим в директорию с клонированным репозиторием и пишем:  
+
+  `python table-rec.py images/Выписки_расписания/vypiska_1.jpeg`
+
+По окончании работы алгоритма в той же директории появится файл .xlsx c таблицей.
 ### Overview
 
 Алгоритм состоит из трех частей:
@@ -24,7 +34,7 @@
 
 Возьмем в качестве примера следующий файл(он находится в папке test_img):
 
-![img](test_img/img1.png)
+![img](test_img/img1.jpeg)
 
 Импортируем необходимые библиотеки.
 
@@ -121,10 +131,11 @@ def contour_pos(boxes, cont, read_image):
     avg = np.mean(dim)
 
     final_box = []
+    weidth = np.array(read_image).shape[1] // 2
+    height = np.array(read_image).shape[0] // 10
     for c in cont:
         s1, s2, s3, s4 = cv2.boundingRect(c)
-        if (s3 < 850 and s4 < 500):
-            rectangle_img = cv2.rectangle(read_image,(s1,s2),(s1+s3,s2+s4),(0,255,0),2)
+        if (s3 < weidth and s4 < height):
             final_box.append([s1,s2,s3,s4])
 
     return final_box, avg
@@ -142,32 +153,31 @@ def sort_boxes(final_box, avg):
     ver=[]
 
     for i in range(len(final_box)):
-        if(i==0):
+        if i == 0:
             ver.append(final_box[i])
-            last=final_box[i]
+            last = final_box[i]
         else:
-            if(final_box[i][1]<=last[1]+avg/2):
+            if final_box[i][1] <= last[1] + avg/2:
                 ver.append(final_box[i])
-                last=final_box[i]
-                if(i==len(final_box)-1):
+                last = final_box[i]
+                if i == len(final_box) - 1:
                     hor.append(ver)
             else:
                 hor.append(ver)
                 ver=[]
                 last = final_box[i]
                 ver.append(final_box[i])
-    total = 0
+    total = mid = 0
 
     for i in range(len(hor)):
-        total = len(hor[i])
-        if total > total:
-            total = total
-    mid = [int(hor[i][j][0]+hor[i][j][2]/2) for j in range(len(hor[i])) if hor[0]]
-    mid=np.array(mid)
+        t = len(hor[i])
+        if t > total:
+            total = t
+        mid = [int(hor[i][j][0]+hor[i][j][2]/2) for j in range(len(hor[i])) if hor[0]]
+    mid = np.array(mid)
     mid.sort()
 
     order = fin_order(hor, total, mid)
-
     return order, hor, total
 ```
 
@@ -203,9 +213,20 @@ def extract_values(order, inverse):
 Последний шаг - преобразование списка в `DataFrame` и сохранение его в Excel-файле.
 
 ```python
-def to_xlsx(extract, hor, total):
+def to_xlsx(extract, hor, total, f_name, n):
     a = np.array(extract)
     dataset = pd.DataFrame(a.reshape(len(hor), total))
-    print(dataset)
-    dataset.to_excel("output1.xlsx", engine='xlsxwriter')
+    pos1 = f_name.rfind('/') + 1
+    if pos1 == -1:
+        pos1 = 0
+    pos2 = f_name.rfind('.')
+    f_name = f_name[pos1: pos2]
+    if n == 0:
+        with pd.ExcelWriter(f_name + '.xlsx', engine="openpyxl",
+                        mode='w', sheet_name = n) as writer:
+            dataset.to_excel(writer)
+    else:
+        with pd.ExcelWriter(f_name + '.xlsx', engine="openpyxl",
+                        mode='a', sheet_name = n) as writer:
+            dataset.to_excel(writer)
 ``
